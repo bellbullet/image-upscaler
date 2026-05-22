@@ -96,19 +96,42 @@ export default function Home() {
     setStatus('upscaling');
     setProgress(15);
     setError(null);
+
+    let step = '初期化';
     try {
-      // canvasで直接base64取得（Safariのblob URL fetch問題を回避）
       const img = imgRef.current;
+
+      step = '画像読み込み待機';
+      if (!img.complete || img.naturalWidth === 0) {
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('画像の読み込み失敗'));
+          setTimeout(() => reject(new Error('画像読み込みタイムアウト')), 10000);
+        });
+      }
+
+      step = 'Canvas作成';
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
+      if (canvas.width === 0 || canvas.height === 0) {
+        throw new Error(`画像サイズ不正: ${canvas.width}x${canvas.height}`);
+      }
+
+      step = 'Canvas描画';
       const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas not supported');
+      if (!ctx) throw new Error('Canvas未対応');
       ctx.drawImage(img, 0, 0);
+
+      step = 'base64変換';
       const base64 = canvas.toDataURL('image/png');
+      if (!base64 || !base64.startsWith('data:image/')) {
+        throw new Error('base64変換失敗');
+      }
 
       setProgress(40);
 
+      step = 'サーバー送信';
       const apiRes = await fetch('/api/upscale-free', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -116,14 +139,23 @@ export default function Home() {
       });
 
       setProgress(85);
-      const data = await apiRes.json();
-      if (!apiRes.ok) throw new Error(data.error ?? 'Server error');
+
+      step = 'レスポンス解析';
+      const text = await apiRes.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`サーバーエラー(${apiRes.status}): ${text.slice(0, 100)}`);
+      }
+      if (!apiRes.ok) throw new Error(data.error ?? `Server error ${apiRes.status}`);
 
       setResultSrc(data.outputBase64);
       setProgress(100);
       setStatus('done');
     } catch (e) {
-      setError(e instanceof Error ? e.message : '処理に失敗しました');
+      const msg = e instanceof Error ? e.message : '処理に失敗しました';
+      setError(`[${step}] ${msg}`);
       setStatus('error');
     }
   };
@@ -319,7 +351,7 @@ export default function Home() {
         ) : (
           <section className="preview-section">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img ref={imgRef} src={originalSrc} alt="" style={{ display: 'none' }} crossOrigin="anonymous" />
+            <img ref={imgRef} src={originalSrc} alt="" style={{ display: 'none' }} />
 
             {status === 'done' && resultSrc ? (
               <div style={{ animation: 'fadeIn 0.4s ease' }}>
