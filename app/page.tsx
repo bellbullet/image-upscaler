@@ -92,19 +92,20 @@ export default function Home() {
 
   // スマホ: サーバーside sharp (軽量)
   const upscaleLightweight = async () => {
-    if (!originalSrc) return;
+    if (!imgRef.current) return;
     setStatus('upscaling');
     setProgress(15);
     setError(null);
     try {
-      const res = await fetch(originalSrc);
-      const blob = await res.blob();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      // canvasで直接base64取得（Safariのblob URL fetch問題を回避）
+      const img = imgRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas not supported');
+      ctx.drawImage(img, 0, 0);
+      const base64 = canvas.toDataURL('image/png');
 
       setProgress(40);
 
