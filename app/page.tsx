@@ -301,7 +301,7 @@ export default function Home() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp,image/bmp"
               style={{ display: 'none' }}
               onChange={(e) => e.target.files?.[0] && loadFile(e.target.files[0])}
             />
